@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29613.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestMemLeakConsoleApp", "TestMemLeakConsoleApp.vcxproj", "{470919FC-3346-4551-923B-C46F4C7F76AD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Debug|Win32.ActiveCfg = Debug|Win32
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Debug|Win32.Build.0 = Debug|Win32
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Debug|x64.ActiveCfg = Debug|x64
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Debug|x64.Build.0 = Debug|x64
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Release|Win32.ActiveCfg = Release|Win32
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Release|Win32.Build.0 = Release|Win32
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Release|x64.ActiveCfg = Release|x64
+		{470919FC-3346-4551-923B-C46F4C7F76AD}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B0EB5FB8-9673-456B-B3B5-5BA92DC16EED}
+	EndGlobalSection
+EndGlobal
