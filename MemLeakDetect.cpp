@@ -557,16 +557,10 @@ bool MemoryLeakDetect::isPaused()
     return _pause[key];
 }
 
-// extern "C" void g_thread_win32_thread_detach(void);
+
 
 void MemoryLeakDetect::freeRemainingAllocations()
 {
-    // g_thread_win32_thread_detach();
-
-    /*for (auto *ptr : _memoryLocations)
-    {
-        free(ptr);
-    }*/
 
     if (_memoryLocations)
     {
@@ -584,7 +578,7 @@ void MemoryLeakDetect::checkInitialize()
 
 void MemoryLeakDetect::insert(void *p)
 {
-    // pause();
+    
     {
         auto tid     = std::this_thread::get_id();
         uint16_t key = fasthash16(&tid, sizeof(tid));
@@ -595,7 +589,7 @@ void MemoryLeakDetect::insert(void *p)
 
     (*_memoryLocations)[p] = true;
 
-    // resume();
+    
     {
         //_allocationMutex.lock();
 
@@ -613,7 +607,7 @@ void MemoryLeakDetect::remove(void *p)
     {
         return;
     }
-    // pause();
+    
     {
 
         auto tid = std::this_thread::get_id();
@@ -621,14 +615,12 @@ void MemoryLeakDetect::remove(void *p)
         uint16_t key = fasthash16(&tid, sizeof(tid));
 
         _pause[key] = 1;
-
-        //_allocationMutex.unlock();
     }
 
-    //_memoryLocations.erase(p);
+
     (*_memoryLocations)[p] = false;
 
-    // resume();
+ 
     {
         auto tid     = std::this_thread::get_id();
         uint16_t key = fasthash16(&tid, sizeof(tid));
