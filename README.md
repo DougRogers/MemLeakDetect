@@ -12,7 +12,7 @@ I have only tested Visual Studio 2022 and x64.  Full stack trace is provided.  Y
 Example output:
    
 ********************************** Memory Leak(1) ********************
-Memory Leak: bytes(16) occurence(2)
+Memory Leak: bytes(16) occurrence(2)
 minkernel\crts\ucrt\src\appcrt\heap\debug_heap.cpp(322): 0x7FF68BAFB580->heap_alloc_dbg_internal()
 minkernel\crts\ucrt\src\appcrt\heap\debug_heap.cpp(450): 0x7FF68BAFB43D->heap_alloc_dbg()
 minkernel\crts\ucrt\src\appcrt\heap\debug_heap.cpp(496): 0x7FF68BAFF1FF->_malloc_dbg()
