@@ -28,11 +28,6 @@ Future		:
 #if !defined(MEMLEAKDETECT_H)
 #define MEMLEAKDETECT_H
 
-#ifndef _CRTDBG_MAP_ALLOC
-#define _CRTDBG_MAP_ALLOC
-#endif
-#define CRTDBG_MAP_ALLOC
-
 #include <list>
 #include <map>
 // #include "tbb/concurrent_hash_map.h"
@@ -83,7 +78,7 @@ public:
         DWORD size;
         std::string fileName;
         DWORD lineNumber;
-        DWORD occurance;
+        DWORD occurrence;
         ULONG stackHash;
 
         std::vector<ADDRESS> traceinfo;
@@ -127,7 +122,8 @@ public:
 
             if (_mapByRequest)
             {
-                _mapByRequest->clear();
+                // tbb crashes for some reason
+                //_mapByRequest->clear();
             }
         };
 
@@ -186,6 +182,7 @@ private:
     static BOOL symFunctionInfoFromAddresses(DWORD64 fnAddress, char *lpszSymbol);
     static BOOL symSourceInfoFromAddress(DWORD64 address, char *lpszSourceInfo);
     static BOOL symModuleNameFromAddress(DWORD64 address, char *lpszModule);
+    static BOOL isSourceFile(DWORD64 address);
 
     static void addMemoryTrace(long requestNumber, DWORD asize, char *fname, DWORD lnum);
     static void redoMemoryTrace(long requestNumber, long prevRequestNumber, DWORD asize, char *fname, DWORD lnum);
@@ -202,7 +199,7 @@ private:
     static bool _started; // don't collect static initializations
 
     static MapMemory _tracker;
-    static DWORD _memoryOccuranceCount;
+    static DWORD _memoryOccurrenceCount;
 
     static void checkInitialize();
 

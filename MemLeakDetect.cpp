@@ -28,7 +28,7 @@ bool MemoryLeakDetect::_started = false; // don't collect static initializations
 _CRT_ALLOC_HOOK MemoryLeakDetect::_prevCrtAllocHookFunction = nullptr;
 
 MemoryLeakDetect::MapMemory MemoryLeakDetect::_tracker;
-DWORD MemoryLeakDetect::_memoryOccuranceCount;
+DWORD MemoryLeakDetect::_memoryOccurrenceCount;
 
 tbb::concurrent_unordered_map<void *, bool> *MemoryLeakDetect::_memoryLocations = nullptr;
 
@@ -173,7 +173,7 @@ void MemoryLeakDetect::addMemoryTrace(long requestNumber, DWORD asize, char *fna
     allocBlockInfo.requestNumber = requestNumber;
     allocBlockInfo.lineNumber    = lnum;
     allocBlockInfo.size          = asize;
-    allocBlockInfo.occurance     = _memoryOccuranceCount++;
+    allocBlockInfo.occurrence    = _memoryOccurrenceCount++;
 
     symStackTrace(allocBlockInfo);
 
@@ -217,7 +217,7 @@ void MemoryLeakDetect::redoMemoryTrace(long requestNumber, long prevRequestNumbe
     allocBlockInfo.requestNumber = requestNumber;
     allocBlockInfo.lineNumber    = lnum;
     allocBlockInfo.size          = asize;
-    allocBlockInfo.occurance     = _memoryOccuranceCount++;
+    allocBlockInfo.occurrence    = _memoryOccurrenceCount++;
 
     symStackTrace(allocBlockInfo);
 
@@ -268,7 +268,18 @@ void MemoryLeakDetect::dumpMemoryTrace()
     {
         AllocBlockInfo &ainfo = iter.second;
 
-        if (ainfo.valid)
+        bool hasSourceFile = false;
+
+        for (auto &address : ainfo.traceinfo)
+        {
+            if (isSourceFile(address.Offset))
+            {
+                hasSourceFile = true;
+                break;
+            }
+        }
+
+        if (ainfo.valid && hasSourceFile)
         {
             mapByHash[ainfo.stackHash] = ainfo;
         }
@@ -284,11 +295,11 @@ void MemoryLeakDetect::dumpMemoryTrace()
 
         if (ainfo.fileName.length() > 0)
         {
-            sprintf(buf, "Memory Leak: bytes(%d) occurance(%d) %s(%d)\n", ainfo.size, ainfo.occurance, ainfo.fileName.c_str(), ainfo.lineNumber);
+            sprintf(buf, "Memory Leak: bytes(%d) occurance(%d) %s(%d)\n", ainfo.size, ainfo.occurrence, ainfo.fileName.c_str(), ainfo.lineNumber);
         }
         else
         {
-            sprintf(buf, "Memory Leak: bytes(%d) occurance(%d)\n", ainfo.size, ainfo.occurance);
+            sprintf(buf, "Memory Leak: bytes(%d) occurance(%d)\n", ainfo.size, ainfo.occurrence);
         }
         //
         AfxTrace(buf);
@@ -300,20 +311,20 @@ void MemoryLeakDetect::dumpMemoryTrace()
             symFunctionInfoFromAddresses(address.Offset, symInfo);
             symSourceInfoFromAddress(address.Offset, srcInfo);
             AfxTrace("%s->%s()\n", srcInfo, symInfo);
-            // p++;
         }
+
         totalSize += ainfo.size;
     }
     sprintf(buf, ("\n-----------------------------------------------------------\n"));
     AfxTrace(buf);
     if (!totalSize)
     {
-        sprintf(buf, ("No Memory Leaks Detected for %d Allocations\n\n"), _memoryOccuranceCount);
+        sprintf(buf, ("No Memory Leaks Detected for %d Allocations\n\n"), _memoryOccurrenceCount);
         AfxTrace(buf);
     }
     else
     {
-        sprintf(buf, ("Total %d Memory Leaks: %d bytes Total Allocations %d\n\n"), numLeaks, totalSize, _memoryOccuranceCount);
+        sprintf(buf, ("Total %d Memory Leaks: %d bytes Total Allocations %d\n\n"), numLeaks, totalSize, _memoryOccurrenceCount);
         AfxTrace(buf);
     }
 }
@@ -403,6 +414,8 @@ void MemoryLeakDetect::symStackTrace(AllocBlockInfo &allocBlockInfo)
     int nFrames = RtlCaptureStackBackTrace(FramesToSkip, MLD_MAX_TRACEINFO - 1, BackTrace, &allocBlockInfo.stackHash);
 
     allocBlockInfo.traceinfo.resize(nFrames);
+    allocBlockInfo.valid = true;
+
     for (int i = 0; i < nFrames; i++)
     {
         ADDRESS &address = allocBlockInfo.traceinfo[i];
@@ -433,6 +446,15 @@ BOOL MemoryLeakDetect::symFunctionInfoFromAddresses(DWORD64 fnAddress, char *lps
     // create the symbol using the address because we have no symbol
     sprintf(lpszSymbol, "0x%I64X", fnAddress);
     return false;
+}
+BOOL MemoryLeakDetect::isSourceFile(DWORD64 address)
+{
+    IMAGEHLP_LINE lineInfo;
+    DWORD dwDisp;
+    memset(&lineInfo, 0, sizeof(IMAGEHLP_LINE));
+    lineInfo.SizeOfStruct = sizeof(IMAGEHLP_LINE);
+
+    return SymGetLineFromAddr(_processHandle, address, &dwDisp, &lineInfo);
 }
 
 BOOL MemoryLeakDetect::symSourceInfoFromAddress(DWORD64 address, char *lpszSourceInfo)
@@ -493,7 +515,6 @@ BOOL MemoryLeakDetect::symModuleNameFromAddress(DWORD64 address, char *lpszModul
 
     return ret;
 }
-#endif
 
 unsigned char PearsonHashing[] = {
     49,  118, 63,  252, 13,  155, 114, 130, 137, 40,  210, 62,  219, 246, 136, 221, 174, 106, 37,  227, 166, 25,  139, 19,  204, 212, 64,  176, 70,
@@ -557,10 +578,16 @@ bool MemoryLeakDetect::isPaused()
     return _pause[key];
 }
 
-
+// extern "C" void g_thread_win32_thread_detach(void);
 
 void MemoryLeakDetect::freeRemainingAllocations()
 {
+    // g_thread_win32_thread_detach();
+
+    /*for (auto *ptr : _memoryLocations)
+    {
+        free(ptr);
+    }*/
 
     if (_memoryLocations)
     {
@@ -578,7 +605,7 @@ void MemoryLeakDetect::checkInitialize()
 
 void MemoryLeakDetect::insert(void *p)
 {
-    
+    // pause();
     {
         auto tid     = std::this_thread::get_id();
         uint16_t key = fasthash16(&tid, sizeof(tid));
@@ -589,7 +616,7 @@ void MemoryLeakDetect::insert(void *p)
 
     (*_memoryLocations)[p] = true;
 
-    
+    // resume();
     {
         //_allocationMutex.lock();
 
@@ -607,7 +634,7 @@ void MemoryLeakDetect::remove(void *p)
     {
         return;
     }
-    
+    // pause();
     {
 
         auto tid = std::this_thread::get_id();
@@ -615,15 +642,18 @@ void MemoryLeakDetect::remove(void *p)
         uint16_t key = fasthash16(&tid, sizeof(tid));
 
         _pause[key] = 1;
+
+        //_allocationMutex.unlock();
     }
 
-
+    //_memoryLocations.erase(p);
     (*_memoryLocations)[p] = false;
 
- 
+    // resume();
     {
         auto tid     = std::this_thread::get_id();
         uint16_t key = fasthash16(&tid, sizeof(tid));
         _pause[key]  = 0;
     }
 }
+#endif
