@@ -78,7 +78,7 @@ public:
         DWORD size;
         std::string fileName;
         DWORD lineNumber;
-        DWORD occurrence;
+        DWORD allocationNumber;
         ULONG stackHash;
 
         std::vector<ADDRESS> traceinfo;
@@ -89,7 +89,7 @@ public:
     typedef tbb::concurrent_unordered_map<ULONG, AllocBlockInfo> AllocationByHash;
     typedef tbb::concurrent_unordered_map<LONG, AllocBlockInfo> AllocationByRequest;
 
-    MemoryLeakDetect();
+    MemoryLeakDetect(int maxLeaksReported = 0, char const *symbolPaths = nullptr);
     ~MemoryLeakDetect();
 
     class MapMemory
@@ -176,7 +176,7 @@ private:
 
     static BOOL initSymInfo(char *lpUserPath);
     static BOOL cleanupSymInfo();
-    static void symbolPaths(char *lpszSymbolPaths);
+    static void addStandardSymbolPaths(char *lpszSymbolPaths);
     static void symStackTrace(AllocBlockInfo &allocBlockInfo);
 
     static BOOL symFunctionInfoFromAddresses(DWORD64 fnAddress, char *lpszSymbol);
@@ -199,11 +199,14 @@ private:
     static bool _started; // don't collect static initializations
 
     static MapMemory _tracker;
-    static DWORD _memoryOccurrenceCount;
+    static DWORD _memoryAllocationCount;
 
     static void checkInitialize();
 
     // valid
     static tbb::concurrent_unordered_map<void *, bool> *_memoryLocations;
+
+    static int _maxLeaksReported;
+    static char const *_userSymbolPaths;
 };
 #endif

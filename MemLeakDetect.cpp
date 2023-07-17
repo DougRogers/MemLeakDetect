@@ -1,4 +1,4 @@
-#define MLD_MAX_NAME_LENGTH 1024
+#define MLD_MAX_NAME_LENGTH 2048
 
 #if _DEBUG
 #define VC_EXTRALEAN // Exclude rarely-used stuff from Windows headers
@@ -13,8 +13,10 @@
 #include <chrono>
 #include <mutex>
 #include <thread>
-
+#include <Shlwapi.h>
 #include <assert.h>
+
+#pragma comment(lib, "shlwapi.lib")
 
 #define VERBOSE 0
 
@@ -28,14 +30,19 @@ bool MemoryLeakDetect::_started = false; // don't collect static initializations
 _CRT_ALLOC_HOOK MemoryLeakDetect::_prevCrtAllocHookFunction = nullptr;
 
 MemoryLeakDetect::MapMemory MemoryLeakDetect::_tracker;
-DWORD MemoryLeakDetect::_memoryOccurrenceCount;
+int MemoryLeakDetect::_maxLeaksReported        = 0;
+char const *MemoryLeakDetect::_userSymbolPaths = nullptr;
+
+DWORD MemoryLeakDetect::_memoryAllocationCount = 0;
 
 tbb::concurrent_unordered_map<void *, bool> *MemoryLeakDetect::_memoryLocations = nullptr;
 
 MemoryLeakDetect::AllocationByRequest *MemoryLeakDetect::MapMemory::_mapByRequest = nullptr;
 
-MemoryLeakDetect::MemoryLeakDetect()
+MemoryLeakDetect::MemoryLeakDetect(int maxLeaksReported, char const *symbolPaths)
 {
+    _maxLeaksReported = maxLeaksReported;
+    _userSymbolPaths  = symbolPaths;
 }
 
 MemoryLeakDetect::~MemoryLeakDetect()
@@ -170,10 +177,10 @@ void MemoryLeakDetect::addMemoryTrace(long requestNumber, DWORD asize, char *fna
     AllocBlockInfo allocBlockInfo;
 
     //
-    allocBlockInfo.requestNumber = requestNumber;
-    allocBlockInfo.lineNumber    = lnum;
-    allocBlockInfo.size          = asize;
-    allocBlockInfo.occurrence    = _memoryOccurrenceCount++;
+    allocBlockInfo.requestNumber    = requestNumber;
+    allocBlockInfo.lineNumber       = lnum;
+    allocBlockInfo.size             = asize;
+    allocBlockInfo.allocationNumber = _memoryAllocationCount++;
 
     symStackTrace(allocBlockInfo);
 
@@ -214,10 +221,10 @@ void MemoryLeakDetect::redoMemoryTrace(long requestNumber, long prevRequestNumbe
 
     AllocBlockInfo allocBlockInfo;
 
-    allocBlockInfo.requestNumber = requestNumber;
-    allocBlockInfo.lineNumber    = lnum;
-    allocBlockInfo.size          = asize;
-    allocBlockInfo.occurrence    = _memoryOccurrenceCount++;
+    allocBlockInfo.requestNumber    = requestNumber;
+    allocBlockInfo.lineNumber       = lnum;
+    allocBlockInfo.size             = asize;
+    allocBlockInfo.allocationNumber = _memoryAllocationCount++;
 
     symStackTrace(allocBlockInfo);
 
@@ -250,12 +257,11 @@ void MemoryLeakDetect::cleanupMemoryTrace()
 
 void MemoryLeakDetect::dumpMemoryTrace()
 {
-    LPVOID addr;
+    // LPVOID addr;
     char buf[MLD_MAX_NAME_LENGTH];
     char symInfo[MLD_MAX_NAME_LENGTH];
     char srcInfo[MLD_MAX_NAME_LENGTH];
     int totalSize = 0;
-    int numLeaks  = 0;
 
     //
     strcpy(symInfo, MLD_TRACEINFO_NOSYMBOL);
@@ -264,6 +270,8 @@ void MemoryLeakDetect::dumpMemoryTrace()
     AllocationByHash mapByHash;
 
     // get uniques stack traces by using hash value
+    int reportCount = 0;
+
     for (auto iter : *_tracker._mapByRequest)
     {
         AllocBlockInfo &ainfo = iter.second;
@@ -282,24 +290,49 @@ void MemoryLeakDetect::dumpMemoryTrace()
         if (ainfo.valid && hasSourceFile)
         {
             mapByHash[ainfo.stackHash] = ainfo;
+            totalSize += ainfo.size;
+            reportCount++;
+
+            if (_maxLeaksReported > 0)
+            {
+                if (reportCount >= _maxLeaksReported)
+                {
+                    break;
+                }
+            }
         }
     }
+    int numLeakCount = mapByHash.size();
 
+    sprintf(buf, ("\n-----------------------------------------------------------\n"));
+    AfxTrace(buf);
+    if (!totalSize)
+    {
+        sprintf(buf, ("No Memory Leaks Detected for %d Allocations\n\n"), _memoryAllocationCount);
+        AfxTrace(buf);
+    }
+    else
+    {
+        sprintf(buf, ("Total %d Memory Leaks: %d bytes Total Allocations %d\n\n"), numLeakCount, totalSize, _memoryAllocationCount);
+        AfxTrace(buf);
+    }
+
+    int leakNumber = 0;
     for (auto iter : mapByHash)
     {
         AllocBlockInfo &ainfo = iter.second;
 
-        numLeaks++;
-        sprintf(buf, "\n\n\n********************************** Memory Leak(%d) ********************\n", numLeaks);
+        sprintf(buf, "\n\n\n********************************** Memory Leak(%d) ********************\n", ++leakNumber);
         AfxTrace(buf);
 
         if (ainfo.fileName.length() > 0)
         {
-            sprintf(buf, "Memory Leak: bytes(%d) occurance(%d) %s(%d)\n", ainfo.size, ainfo.occurrence, ainfo.fileName.c_str(), ainfo.lineNumber);
+            sprintf(buf, "Memory Leak: bytes(%d) occurrence(%d) %s(%d)\n", ainfo.size, ainfo.allocationNumber, ainfo.fileName.c_str(),
+                    ainfo.lineNumber);
         }
         else
         {
-            sprintf(buf, "Memory Leak: bytes(%d) occurance(%d)\n", ainfo.size, ainfo.occurrence);
+            sprintf(buf, "Memory Leak: bytes(%d) occurrence(%d)\n", ainfo.size, ainfo.allocationNumber);
         }
         //
         AfxTrace(buf);
@@ -312,20 +345,6 @@ void MemoryLeakDetect::dumpMemoryTrace()
             symSourceInfoFromAddress(address.Offset, srcInfo);
             AfxTrace("%s->%s()\n", srcInfo, symInfo);
         }
-
-        totalSize += ainfo.size;
-    }
-    sprintf(buf, ("\n-----------------------------------------------------------\n"));
-    AfxTrace(buf);
-    if (!totalSize)
-    {
-        sprintf(buf, ("No Memory Leaks Detected for %d Allocations\n\n"), _memoryOccurrenceCount);
-        AfxTrace(buf);
-    }
-    else
-    {
-        sprintf(buf, ("Total %d Memory Leaks: %d bytes Total Allocations %d\n\n"), numLeaks, totalSize, _memoryOccurrenceCount);
-        AfxTrace(buf);
     }
 }
 
@@ -338,7 +357,7 @@ void MemoryLeakDetect::shutdown()
     GlobalFree(_symbol);
 }
 
-void MemoryLeakDetect::symbolPaths(char *lpszSymbolPath)
+void MemoryLeakDetect::addStandardSymbolPaths(char *lpszSymbolPath)
 {
     char lpszPath[MLD_MAX_NAME_LENGTH];
 
@@ -378,24 +397,55 @@ BOOL MemoryLeakDetect::cleanupSymInfo()
     return SymCleanup(GetCurrentProcess());
 }
 
+DWORD getThisPath(char *dest, size_t destSize)
+{
+    if (!dest)
+        return NULL;
+    if (MAX_PATH > destSize)
+        return NULL;
+
+    DWORD length = GetModuleFileNameA(NULL, dest, destSize);
+
+    PathRemoveFileSpecA(dest);
+    return length;
+}
 // Initializes the symbol files
 BOOL MemoryLeakDetect::initSymInfo(char *lpszUserSymbolPath)
 {
     CHAR lpszSymbolPath[MLD_MAX_NAME_LENGTH];
     DWORD symOptions = SymGetOptions();
 
+    // set
     symOptions |= SYMOPT_LOAD_LINES;
+    symOptions |= SYMOPT_DEFERRED_LOADS;
+    // clear
     symOptions &= ~SYMOPT_UNDNAME;
+
     SymSetOptions(symOptions);
 
     // Get the search path for the symbol files
-    symbolPaths(lpszSymbolPath);
+    addStandardSymbolPaths(lpszSymbolPath);
     //
     if (lpszUserSymbolPath)
     {
         strcat(lpszSymbolPath, (";"));
         strcat(lpszSymbolPath, lpszUserSymbolPath);
     }
+    strcat(lpszSymbolPath, (";"));
+    strcat(lpszSymbolPath, "http://msdl.microsoft.com/download/symbols");
+
+    char currentPath[MAX_PATH];
+    getThisPath(currentPath, MAX_PATH);
+
+    strcat(lpszSymbolPath, (";"));
+    strcat(lpszSymbolPath, currentPath);
+
+    if (_userSymbolPaths)
+    {
+        strcat(lpszSymbolPath, (";"));
+        strcat(lpszSymbolPath, _userSymbolPaths);
+    }
+
     return SymInitialize(GetCurrentProcess(), lpszSymbolPath, true);
 }
 
@@ -578,16 +628,12 @@ bool MemoryLeakDetect::isPaused()
     return _pause[key];
 }
 
-// extern "C" void g_thread_win32_thread_detach(void);
-
 void MemoryLeakDetect::freeRemainingAllocations()
 {
-    // g_thread_win32_thread_detach();
-
     /*for (auto *ptr : _memoryLocations)
-    {
-        free(ptr);
-    }*/
+     {
+         free(ptr);
+     }*/
 
     if (_memoryLocations)
     {
@@ -605,27 +651,18 @@ void MemoryLeakDetect::checkInitialize()
 
 void MemoryLeakDetect::insert(void *p)
 {
-    // pause();
-    {
-        auto tid     = std::this_thread::get_id();
-        uint16_t key = fasthash16(&tid, sizeof(tid));
+    // pause
+    auto tid     = std::this_thread::get_id();
+    uint16_t key = fasthash16(&tid, sizeof(tid));
 
-        _pause[key] = 1;
-    }
+    _pause[key] = 1;
+
     checkInitialize();
 
     (*_memoryLocations)[p] = true;
 
-    // resume();
-    {
-        //_allocationMutex.lock();
-
-        auto tid = std::this_thread::get_id();
-
-        uint16_t key = fasthash16(&tid, sizeof(tid));
-
-        _pause[key] = 0;
-    }
+    // resume
+    _pause[key] = 0;
 }
 
 void MemoryLeakDetect::remove(void *p)
@@ -634,26 +671,14 @@ void MemoryLeakDetect::remove(void *p)
     {
         return;
     }
-    // pause();
-    {
+    // pause
+    auto tid     = std::this_thread::get_id();
+    uint16_t key = fasthash16(&tid, sizeof(tid));
+    _pause[key]  = 1;
 
-        auto tid = std::this_thread::get_id();
-
-        uint16_t key = fasthash16(&tid, sizeof(tid));
-
-        _pause[key] = 1;
-
-        //_allocationMutex.unlock();
-    }
-
-    //_memoryLocations.erase(p);
     (*_memoryLocations)[p] = false;
 
-    // resume();
-    {
-        auto tid     = std::this_thread::get_id();
-        uint16_t key = fasthash16(&tid, sizeof(tid));
-        _pause[key]  = 0;
-    }
+    // resume
+    _pause[key] = 0;
 }
 #endif
