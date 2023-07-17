@@ -7,7 +7,7 @@ https://www.codeproject.com/Tips/161454/Windows-Memory-leak-detection-update-to-
 
 MemLeakDetect is a memory leak detector for Visual Studio originally posted in Code Project.  I ported MemLeakDetect to x64 a while ago and have upgraded it over time.  It still is relevant since it is so easy to incorporate into MSVC and Microsoft does not support leak detection in ASan yet.
 
-I have only tested Visual Studio 2022 and x64.  Full stack trace is provided.  You can double-click on lines with file name to navigate to file location.
+I have only tested Visual Studio 2022 and x64.  Full stack trace is provided.  You can double-click on lines with file names to navigate to the file location.
 
 Example output:
    
@@ -35,5 +35,21 @@ D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_wmain.cpp(17): 0x7FF68B
 
 This project requires tbb.  Microsoft's implementation of concurrent_unordered_map does not have the 'contains' function.
 I recommend using vcpkg to install tbb.  https://vcpkg.io/en/
+
+
+Usage:
+Declare MemoryLeakDetect statically:
+like:
+MemoryLeakDetect gMemLeakDetect;
+There are two optional arguments 
+   max number of leak reports
+   additional path to .pdb files that are used.  Separated by semi colons
+MemoryLeakDetect gMemLeakDetect(100, "C:\\Qt\\6.5.1\\msvc2019_64\\bin");
+
+Then call:
+    gMemLeakDetect.start();
+when you want collection to start.   
+
+
 
 
